@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import time
+import weakref
 
 from slacker import Slacker
 from slackclient import SlackClient
@@ -27,6 +28,10 @@ class SlackBot(object):
                     plugin.process_event(event)
             time.sleep(1)
 
+    # in subclass, post with name/icon
+    def post_message(self, channel, message):
+        self.api.chat.post_message(channel, message)
+
     def update_maps(self):
         for user in self.api.users.list().body['members']:
             self.user_map[user['id']] = user
@@ -52,15 +57,16 @@ class SlackBot(object):
         return [
             EventTypePlugin,
             PrintPlugin,
+            EchoPlugin,
         ]
 
     def load_plugins(self):
         for klass in self.plugin_classes():
-            self.plugins.append(klass(self.api))
+            self.plugins.append(klass(self))
 
 class Plugin(object):
-    def __init__(self, api):
-        self.api = api
+    def __init__(self, bot):
+        self.weak_bot = weakref.ref(bot)
 
     # default behavior
     def process_event(self, event):
@@ -84,6 +90,13 @@ class PrintPlugin(Plugin):
         user    = message['user_dict']
         channel = message['channel_dict']
         print '[#%s]<%s>: %s' % (channel['name'], user['name'], message['text'])
+
+# sample plugin
+class EchoPlugin(Plugin):
+    def process_message(self, message):
+        if 'subtype' in message:
+            return
+        self.weak_bot().post_message(message['channel'], message['text'])
 
 def main():
     print 'run'
